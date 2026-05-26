@@ -219,6 +219,47 @@ export default function App() {
     setShowAddSubject(false);
   };
 
+  const handleRenameSubject = (oldSubName) => {
+    const newSubName = prompt(`Rename "${oldSubName}" to:`, oldSubName);
+    if (!newSubName || !newSubName.trim()) return;
+    if (newSubName.trim() === oldSubName) return;
+
+    const { branch, year, sem } = nav;
+
+    setData(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      const targetSem = updated[branch]?.[year]?.[sem];
+
+      if (!targetSem || !targetSem[oldSubName]) return prev;
+      if (targetSem[newSubName]) {
+        alert("A subject with that name already exists!");
+        return prev;
+      }
+
+      targetSem[newSubName] = targetSem[oldSubName];
+      delete targetSem[oldSubName];
+      return updated;
+    });
+
+    setNav(n => ({ ...n, subject: null }));
+  };
+
+  const handleDeleteSubject = (subName) => {
+    if (!confirm(`Are you sure you want to delete "${subName}" and all its uploaded resources?`)) return;
+
+    const { branch, year, sem } = nav;
+
+    setData(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      if (updated[branch]?.[year]?.[sem]?.[subName]) {
+        delete updated[branch][year][sem][subName];
+      }
+      return updated;
+    });
+
+    setNav(n => ({ ...n, subject: null }));
+  };
+
   const totalCount = () => {
     let c = 0;
     Object.values(data).forEach(yrs => Object.values(yrs).forEach(sems => Object.values(sems).forEach(subjs => Object.values(subjs).forEach(types => {
@@ -364,11 +405,11 @@ export default function App() {
           </div>
         )}
 
-        {/* Level 4: Subject Selector */}
+        {/* Level 4: Subject Selector with Actions */}
         {!search && nav.branch && nav.year && nav.sem && !nav.subject && (
           <div>
             <h2 className="font-bold text-xl mb-1 text-gray-700">{nav.sem} — {BRANCH_SHORT[nav.branch]}</h2>
-            <p className="text-sm text-gray-400 mb-4">Select Subject</p>
+            <p className="text-sm text-gray-400 mb-4">Select or Manage Subjects</p>
             {curSubjects.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <div className="text-5xl mb-3">📭</div>
@@ -381,18 +422,41 @@ export default function App() {
                   const r = data[nav.branch][nav.year][nav.sem][sub] || { books: [], notes: [], pyqs: [], videos: [] };
                   const total = (r.books?.length || 0) + (r.notes?.length || 0) + (r.pyqs?.length || 0) + (r.videos?.length || 0);
                   return (
-                    <div key={sub} onClick={() => go("subject", sub)}
-                      className="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-xl transition shadow-md border border-gray-100 flex items-center gap-4">
-                      <div className="text-4xl">📖</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-gray-800 truncate">{sub}</div>
-                        <div className="flex gap-1 mt-2 flex-wrap">
-                          {["books", "notes", "pyqs", "videos"].map(t => (
-                            <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t]}`}>{(r[t] || []).length} {t}</span>
-                          ))}
+                    <div key={sub} 
+                      className="bg-white rounded-2xl p-5 shadow-md border border-gray-100 flex items-center justify-between gap-4 hover:shadow-xl transition group">
+                      
+                      {/* Clickable Area to enter Subject Dashboard */}
+                      <div onClick={() => go("subject", sub)} className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer">
+                        <div className="text-4xl">📖</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-gray-800 truncate group-hover:text-indigo-600 transition">{sub}</div>
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {["books", "notes", "pyqs", "videos"].map(t => (
+                              <span key={t} className={`text-xs px-2 py-0.5 rounded-full ${TYPE_COLORS[t]}`}>{(r[t] || []).length} {t}</span>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                      <div className="text-2xl font-bold text-indigo-500">{total}</div>
+
+                      {/* Management Action Handlers */}
+                      <div className="flex items-center gap-3">
+                        <div className="text-xl font-bold text-indigo-500 mr-1">{total}</div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRenameSubject(sub); }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                          title="Rename Subject"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSubject(sub); }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                          title="Delete Subject"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+
                     </div>
                   );
                 })}
@@ -404,7 +468,23 @@ export default function App() {
         {/* Level 5: Sub-Categorized Dashboard Files Display */}
         {!search && nav.subject && resources && (
           <div>
-            <h2 className="font-bold text-xl mb-1 text-gray-800">{nav.subject}</h2>
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <h2 className="font-bold text-xl text-gray-800">{nav.subject}</h2>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => handleRenameSubject(nav.subject)}
+                  className="text-xs bg-blue-50 text-blue-600 px-2.5 py-1 rounded-md font-medium hover:bg-blue-100 transition"
+                >
+                  ✏️ Rename
+                </button>
+                <button 
+                  onClick={() => handleDeleteSubject(nav.subject)}
+                  className="text-xs bg-red-50 text-red-600 px-2.5 py-1 rounded-md font-medium hover:bg-red-100 transition"
+                >
+                  🗑️ Delete Subject
+                </button>
+              </div>
+            </div>
             <p className="text-xs text-gray-400 mb-4">{nav.branch} · {nav.year} · {nav.sem}</p>
             <div className="flex gap-2 mb-4 flex-wrap">
               {["books", "notes", "pyqs", "videos"].map(t => (
@@ -446,7 +526,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Upload Modal (With File System Input Integrated) */}
+      {/* Upload Modal Container */}
       {showUpload && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -487,7 +567,7 @@ export default function App() {
                 <option value="videos">🎥 Video</option>
               </select>
 
-              {/* Enhanced File Input directly in modal context */}
+              {/* PDF/Local File Attachment Block */}
               <div className="border-2 border-dashed border-gray-200 rounded-xl p-3 bg-gray-50">
                 <p className="text-[11px] font-bold text-gray-500 uppercase mb-1">Attach Local File</p>
                 <input
@@ -535,7 +615,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Subject Modal */}
+      {/* Add Subject Modal Container */}
       {showAddSubject && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -556,7 +636,7 @@ export default function App() {
                 <option value="">Select Semester</option>
                 {subSems.map(s => <option key={s}>{s}</option>)}
               </select>
-              <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400" placeholder="Subject Name (e.g. Control Systems)" value={subForm.subject} onChange={e => setSubForm(f => ({...f, subject: e.target.value}))} />
+              <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400" placeholder="Subject Name (e.g. Data Structures)" value={subForm.subject} onChange={e => setSubForm(f => ({...f, subject: e.target.value}))} />
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={handleAddSubject} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition">Add Subject</button>
