@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./supabase";
 
 const BRANCHES = [
   "Biological Science & Engineering",
@@ -89,6 +90,26 @@ const YEAR_COLORS = [
 
 export default function App() {
   const [data, setData] = useState(buildInitialData);
+  const [dbReady, setDbReady] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: row } = await supabase
+        .from("resources")
+        .select("data")
+        .single();
+      if (row?.data && Object.keys(row.data).length > 0) {
+        setData(row.data);
+      }
+      setDbReady(true);
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!dbReady) return;
+    supabase.from("resources").update({ data }).eq("id", 1);
+  }, [data, dbReady]);
   const [nav, setNav] = useState({ branch: null, year: null, sem: null, subject: null });
   const [activeTab, setActiveTab] = useState("books");
   const [search, setSearch] = useState("");
