@@ -127,6 +127,8 @@ export default function App() {
   const emptyForm = { branch: "", year: "", sem: "", subject: "", title: "", type: "books", link: "" };
   const [form, setForm] = useState(emptyForm);
   const [subForm, setSubForm] = useState({ branch: "", year: "", sem: "", subject: "" });
+  const [uploadFile, setUploadFile] = useState(null);
+const [uploading, setUploading] = useState(false);
 
   const go = (key, val) => {
     if (key === "branch") setNav({ branch: val, year: null, sem: null, subject: null });
@@ -158,17 +160,73 @@ export default function App() {
     setSearchResults(res);
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     const { branch, year, sem, subject, title, type, link } = form;
-    if (!branch || !year || !sem || !subject || !title) return alert("Please fill all fields!");
-    const newItem = { title, link: link || "#", uploadedBy: "Student", date: new Date().toLocaleDateString() };
+
+    // 1. Check all fields are filled
+    if (!branch || !year || !sem || !subject || !title)
+      return alert("Please fill all fields!");
+
+    // 2. Must have either a file OR a link
+    if (!uploadFile && !link.trim())
+      return alert("Please upload a file or paste a link!");
+
+    // 3. File size check — max 5MB
+    if (uploadFile && uploadFile.size > 5 * 1024 * 1024)
+      return alert("File too large! Maximum size is 5MB.");
+
+    let finalLink = link.trim() || "#";
+    let isFile = false;
+
+    // 4. If file selected — upload to Supabase Storage
+    if (uploadFile) {
+      setUploading(true);
+
+      const fileExt = uploadFile.name.split(".").pop();
+      const safeBranch = branch.replace(/\s+/g, "_");
+      const safeSubject = subject.replace(/\s+/g, "_");
+      const fileName = `${safeBranch}/${year}/${sem}/${safeSubject}/${Date.now()}.${fileExt}`;
+
+      const { error } = await supabase.storage
+        .from("resources")
+        .upload(fileName, uploadFile, { upsert: false });
+
+      setUploading(false);
+
+      if (error) {
+        alert("Upload failed: " + error.message);
+        return;
+      }
+
+      // 5. Get the public URL of uploaded file
+      const { data: urlData } = supabase.storage
+        .from("resources")
+        .getPublicUrl(fileName);
+
+      finalLink = urlData.publicUrl;
+      isFile = true;
+    }
+
+    // 6. Save the resource item to your data
+    const newItem = {
+      title,
+      link: finalLink,
+      uploadedBy: "Student",
+      date: new Date().toLocaleDateString(),
+      isFile,
+      fileName: uploadFile ? uploadFile.name : null,
+    };
+
     setData(prev => {
       const u = JSON.parse(JSON.stringify(prev));
       if (!u[branch]?.[year]?.[sem]?.[subject]) return prev;
       u[branch][year][sem][subject][type].push(newItem);
       return u;
     });
+
+    // 7. Reset everything and close modal
     setForm(emptyForm);
+    setUploadFile(null);
     setShowUpload(false);
   };
 
@@ -220,12 +278,73 @@ export default function App() {
               <button onClick={() => setShowUpload(true)} className="bg-yellow-400 text-gray-900 font-bold px-4 py-2 rounded-lg text-sm hover:bg-yellow-300 transition">⬆ Upload</button>
             </div>
           </div>
-          <input
-            className="w-full mt-3 rounded-xl px-4 py-2 text-gray-800 text-sm outline-none shadow"
-            placeholder="🔍 Search resources, subjects..."
-            value={search}
-            onChange={e => handleSearch(e.target.value)}
-          />
+          {/* File Upload */}
+<div className="border-2 border-dashed border-gray-200 rounded-xl p-4 bg-gray-50">
+  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">📎 Upload File (PDF, Image, Doc)</p>
+  <input
+    type="file"
+    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+    onChange={e => {
+      const file = e.target.files[0];
+      if (file && file.size > 5 * 1024 * 1024) {
+        alert("File too large! Max 5MB. Your file: " + (file.size / (1024*1024)).toFixed(1) + "MB");
+        e.target.value = "";
+        setUploadFile(null);
+      } else {
+        setUploadFile(file || null);
+      }
+    }}
+    className="w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+  />
+  {uploadFile && (
+    <div className="mt-2 flex items-center justify-between bg-indigo-50 rounded-lg px-3 py-1.5">
+      <span className="text-xs text-indigo-700 truncate max-w-[200px]">📄 {uploadFile.name}</span>
+      <button onClick={() => setUploadFile(null)} className="ml-2 text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
+    </div>
+  )}
+  <p className="text-xs text-gray-400 mt-1">Max 5MB · PDF, PNG, JPG, DOC</p>
+</div>
+
+{/* OR paste a URL */}
+<p className="text-center text-xs text-gray-400">— or paste a link —</p>
+{/* File Upload */}
+<div className="border-2 border-dashed border-gray-200 rounded-xl p-4 bg-gray-50">
+  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">📎 Upload File (PDF, Image, Doc)</p>
+  <input
+    type="file"
+    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+    onChange={e => {
+      const file = e.target.files[0];
+      if (file && file.size > 5 * 1024 * 1024) {
+        alert("File too large! Max 5MB.");
+        e.target.value = "";
+        setUploadFile(null);
+      } else {
+        setUploadFile(file || null);
+      }
+    }}
+    className="w-full text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+  />
+  {uploadFile && (
+    <div className="mt-2 flex items-center justify-between bg-indigo-50 rounded-lg px-3 py-1.5">
+      <span className="text-xs text-indigo-700 truncate max-w-[200px]">📄 {uploadFile.name}</span>
+      <button onClick={() => setUploadFile(null)} className="ml-2 text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
+    </div>
+  )}
+  <p className="text-xs text-gray-400 mt-1">Max 5MB · PDF, PNG, JPG, DOC</p>
+</div>
+
+{/* OR paste a URL */}
+<p className="text-center text-xs text-gray-400">— or paste a link —</p>
+<input
+  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400"
+  placeholder="https://... (URL to PDF / Video)"
+  value={form.link}
+  onChange={e => setForm(f => ({...f, link: e.target.value}))}
+  disabled={!!uploadFile}
+/>
+{uploadFile && <p className="text-xs text-gray-400">Remove the file above to use a link instead.</p>}
+{uploadFile && <p className="text-xs text-gray-400">Remove the file above to use a link instead.</p>}
         </div>
       </div>
 
@@ -249,16 +368,24 @@ export default function App() {
               ? <div className="text-center py-12 text-gray-400"><div className="text-5xl mb-2">🔍</div><p>No results found for "{search}"</p></div>
               : <div className="grid gap-3">
                   {searchResults.map((r, i) => (
-                    <div key={i} className="bg-white rounded-xl p-4 shadow flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <p className="font-semibold text-gray-800">{r.title}</p>
-                        <p className="text-xs text-gray-400">{BRANCH_SHORT[r.br]} › {r.yr} › {r.sm} › {r.sub}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${TYPE_COLORS[r.type]}`}>{TYPE_LABELS[r.type]}</span>
-                        <a href={r.link} target="_blank" rel="noreferrer" className="bg-indigo-600 text-white text-xs px-3 py-1 rounded-lg hover:bg-indigo-700">View</a>
-                      </div>
-                    </div>
+                   <div key={i} className="bg-white rounded-xl p-4 shadow flex items-center justify-between flex-wrap gap-2">
+  <div>
+    <p className="font-semibold text-gray-800">{item.title}</p>
+    <p className="text-xs text-gray-400">By {item.uploadedBy} · {item.date}</p>
+    {/* ✅ Show file name if it was an uploaded file */}
+    {item.isFile && item.fileName && (
+      <p className="text-xs text-indigo-500 mt-0.5">📎 {item.fileName}</p>
+    )}
+  </div>
+  <div className="flex items-center gap-2">
+    <span className={`text-xs px-2 py-1 rounded-full font-medium ${TYPE_COLORS[activeTab]}`}>{TYPE_LABELS[activeTab]}</span>
+    {/* ✅ Different button text for files vs links */}
+    <a href={item.link} target="_blank" rel="noreferrer"
+      className="bg-indigo-600 text-white text-xs px-3 py-1 rounded-lg hover:bg-indigo-700">
+      {item.isFile ? "📎 Open File" : "🔗 View / Download"}
+    </a>
+  </div>
+</div>
                   ))}
                 </div>
             }
@@ -432,7 +559,13 @@ export default function App() {
               <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-indigo-400" placeholder="Link (URL to PDF / Video)" value={form.link} onChange={e => setForm(f => ({...f, link: e.target.value}))} />
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={handleUpload} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition">Upload</button>
+             <button
+  onClick={handleUpload}
+  disabled={uploading}
+  className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
+>
+  {uploading ? "Uploading... ⏳" : "Upload"}
+</button>
               <button onClick={() => { setShowUpload(false); setForm(emptyForm); }} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-200 transition">Cancel</button>
             </div>
           </div>
