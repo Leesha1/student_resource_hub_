@@ -107,9 +107,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!dbReady) return;
-    supabase.from("resources").update({ data }).eq("id", 1);
-  }, [data, dbReady]);
+  if (!dbReady) return;
+  const save = async () => {
+    const { error } = await supabase
+      .from("resources")
+      .update({ data })
+      .eq("id", 1);
+    if (error) console.error("Save error:", error);
+  };
+  save();
+}, [data, dbReady]);
   const [nav, setNav] = useState({ branch: null, year: null, sem: null, subject: null });
   const [activeTab, setActiveTab] = useState("books");
   const [search, setSearch] = useState("");
